@@ -212,6 +212,9 @@ def main(argv: Iterable[str] | None = None) -> int:
         return 1
     url = f"{API_URL}/repos/{owner}/{repo}/branches/{args.branch}/protection"
     status, protection, response_text = _api_request("GET", url, token)
+    if status == 401:
+        sys.stderr.write("error: invalid authentication when reading branch protection\n")
+        return 1
     if status == 403:
         sys.stderr.write("::warning::Missing permission to read branch protection; skipping verification.\n")
         return 0
