@@ -25,17 +25,21 @@ export async function loadRuntime() {
   return await mod.loadPyodide({indexURL: CDN_BASE});
 }
 
-export function setupPyodideDemo(chart, logEl, defaultData) {
+export function setupPyodideDemo(chart, logEl, experiments, onExperimentRendered) {
+  const knownExperiments = Array.isArray(experiments) && experiments.length > 0
+    ? experiments
+    : [{id: 'default', payload: {steps: [], values: [], logs: []}}];
+
   function showMessage(msg) {
     if (logEl) {
       logEl.textContent += `${msg}\n`;
     }
   }
 
-  function render(data) {
-    const steps = data.steps || [];
-    const values = data.values || [];
-    const logs = data.logs || [];
+  function render(payload, activeId) {
+    const steps = payload?.steps || [];
+    const values = payload?.values || [];
+    const logs = payload?.logs || [];
     chart.data.labels = [];
     chart.data.datasets[0].data = [];
     if (logEl) logEl.textContent = '';
@@ -45,9 +49,19 @@ export function setupPyodideDemo(chart, logEl, defaultData) {
       chart.update();
       if (logEl && logs[idx]) logEl.textContent += logs[idx] + '\n';
     });
+    onExperimentRendered?.(activeId);
   }
 
-  render(defaultData);
+  const defaultExperiment = knownExperiments[0];
+  render(defaultExperiment.payload, defaultExperiment.id);
+
+  window.addEventListener('experiment-change', (event) => {
+    const activeId = event.detail?.id;
+    const selected = knownExperiments.find((entry) => entry.id === activeId);
+    if (selected) {
+      render(selected.payload, selected.id);
+    }
+  });
 
   let pyodide;
   const offlineBtn = document.getElementById('offline-mode');
@@ -64,7 +78,7 @@ values = [random.random() for _ in steps]
 logs = [f"offline step {i}" for i in steps]
 json.dumps({"steps": steps, "values": values, "logs": logs})`;
     const result = await pyodide.runPythonAsync(code);
-    render(JSON.parse(result));
+    render(JSON.parse(result), 'offline-runtime');
     showMessage('Offline simulation complete.');
   }
 
@@ -100,7 +114,7 @@ json.dumps({"steps": steps, "values": values, "logs": logs})`;
       } catch (e) {
         console.error('OpenAI response parse error', e);
       }
-      render(parsed);
+      render(parsed, 'openai-response');
       showMessage('OpenAI response received.');
     } catch (err) {
       console.error('OpenAI request failed', err);
